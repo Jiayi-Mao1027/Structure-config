@@ -1,25 +1,188 @@
-# Codex-Native Agent Subsystem Bootstrap Pack (v3)
+# Codex-Native Agent Subsystem Bootstrap Pack (v5)
 
-This revision is rebuilt from the repository's original protocol assets rather than replacing them with a thinner ad-hoc layer.
+A controlled, role-separated execution architecture for [OpenAI Codex CLI](https://github.com/openai/codex). The system uses Codex as the persistent orchestrator (Layer 2) while delegating leaf-worker roles to Claude through explicit bridge skills.
 
-What changed from the earlier pack:
-- `project-root/AGENTS.md` and `project-root/CLAUDE.md` are now direct modifications of the repo originals.
-- `project-root/ops/contracts/*.md` are included as adapted versions of the original contracts.
-- Claude-side skills are rewritten to mirror those contracts instead of inventing new lightweight prompts.
-- `ensure-project-state` now has an actual helper script.
-- `cc-opus-coder` now has actual helper scripts for GPU probing and owned-process tracking.
-- project-level `.codex` is intentionally thin.
+## Architecture Overview
 
-Intended usage:
-1. Merge `project-root/*` into the repository root.
-2. Merge `user-home/.codex`, `user-home/.agents`, and `user-home/.claude` into the user's home directory.
-3. Fill in `~/.codex/bridge_api.toml` from the provided example.
-4. Keep project semantics in the repo; keep reusable runtime helpers in user-home.
+```
+Layer 1 (User)
+  │
+  ▼
+Layer 2 (Codex Orchestrator)          ← single control plane
+  │
+  ├── Codex-owned roles (native)
+  │     ├── Preflight Auditor
+  │     ├── Postrun Auditor
+  │     └── Codex Anomaly Analyst
+  │
+  └── Claude-owned roles (via cc-* skills)
+        ├── cc-refresher
+        ├── cc-curator
+        ├── cc-opus-coder
+        └── cc-claude-anomaly-analyst
+```
 
+### Core Principles
 
-## v4 correction
-Role contracts are now embedded directly into Codex subagent prompts, Claude leaf-worker notes, and Claude carrier skills. Repository `ops/contracts/*.md` remains the project source of truth, but leaf workers no longer rely on a thin pointer such as "go read the contract".
+- **Codex-centered control**: Codex Orchestrator is the only front-facing controller. Claude is an external worker domain, not a control plane.
+- **Role separation**: Fixed downstream roles with typed responsibilities and explicit ownership boundaries.
+- **File-backed state**: Important run state is reconstructible from artifacts, not chat memory.
+- **Typed issue taxonomy**: Every unresolved item is classified as `user_decision`, `orchestrator_default`, `execution_layer_fix`, `nonblocking_risk`, or `hard_stop`.
+- **Mediated change-set expansion**: Reading scope may expand freely; authoritative execution scope may not expand silently.
 
+### Canonical Run Cycle
 
-## Corrected Claude leaf-worker placement
-Claude leaf workers are not defined under `~/.claude/agents/`. All Claude leaf-worker contracts now live in `~/.agents/skills/cc-*`, and `~/.claude/CLAUDE.md` is kept as a thin shared runtime layer only.
+```
+compile → ensure-project-state → refresher → curator
+→ preflight(initial_readiness) → opus(implement) → opus(debug)
+→ preflight(run_gate) → opus(execute) → postrun → upward_report
+```
+
+Stages may loop, reroute, pause, or stop depending on what is discovered. The Orchestrator decides all stage transitions.
+
+## Directory Structure
+
+```
+codex_native_bootstrap_pack_v5/
+├── project-root/                    # Merge into your repository root
+│   ├── .codex/config.toml           # Thin project-level Codex config
+│   ├── AGENTS.md                    # Project-coupled runtime rules
+│   ├── CLAUDE.md                    # Project-level Claude notes (placeholder)
+│   ├── MIGRATION_MAP.md             # Placement guidance
+│   ├── ops/
+│   │   ├── contracts/               # Role contracts (project source of truth)
+│   │   │   ├── anomaly-analyst.md
+│   │   │   ├── curator.md
+│   │   │   ├── layer2-orchestrator.md
+│   │   │   ├── opus-coder.md
+│   │   │   ├── postrun-auditor.md
+│   │   │   ├── preflight-auditor.md
+│   │   │   └── refresher.md
+│   │   └── templates/               # Execution plan, manifest, task-spec templates
+│   └── specs/                       # Run-state documents (placeholders)
+│       ├── mission.md
+│       ├── current_run.md
+│       └── learned_constraints.md
+│
+└── user-home/                       # Merge into user's home directory (~)
+    ├── .agents/skills/              # Claude leaf-worker skill definitions
+    │   ├── cc-claude-anomaly-analyst/
+    │   ├── cc-curator/
+    │   ├── cc-opus-coder/
+    │   ├── cc-refresher/
+    │   └── ensure-project-state/
+    ├── .claude/
+    │   ├── CLAUDE.md                # Thin shared Claude runtime notes
+    │   └── settings.json
+    └── .codex/
+        ├── AGENTS.md                # User-level control-plane constitution
+        ├── config.toml              # Orchestrator model/behavior config
+        ├── bridge_api.toml          # Claude bridge API config (fill in your keys)
+        ├── rules/default.rules      # Shared runtime rules
+        ├── agents/                  # Codex-native subagent definitions
+        │   ├── codex_anomaly_analyst.toml
+        │   ├── postrun_auditor.toml
+        │   └── preflight_auditor.toml
+        └── protocol/
+            ├── bin/                 # Shared helper scripts
+            │   ├── claude_skill_runner.py   # Claude bridge runner (SDK-based)
+            │   ├── ensure_project_state.sh  # Bootstrap repo state
+            │   ├── gpu_probe.py             # GPU discovery & selection
+            │   ├── owned_processes.py       # Process ownership guard
+            │   └── validate_json.py         # JSON validation helper
+            ├── runtime/
+            │   └── gpu_policy.toml          # GPU selection policy
+            ├── schemas/
+            │   ├── preflight_issue.schema.json
+            │   └── receipt.schema.json
+            └── templates/                   # Protocol document templates
+                ├── execution-plan.md
+                ├── handoff.md
+                ├── role-report.md
+                ├── task-spec.md
+                └── upward-report.md
+```
+
+## Setup
+
+### 1. Merge project-root into your repository
+
+```bash
+cp -r project-root/* /path/to/your/repo/
+```
+
+Fill in `specs/mission.md`, `specs/current_run.md`, and `CLAUDE.md` with your project's actual content.
+
+### 2. Merge user-home into your home directory
+
+```bash
+cp -r user-home/.codex ~/
+cp -r user-home/.claude ~/
+cp -r user-home/.agents ~/
+```
+
+### 3. Configure API credentials
+
+Edit `~/.codex/bridge_api.toml` and fill in your actual `api_key` and `api_base_url`:
+
+```toml
+[claude_bridge]
+api_base_url = "https://your-api-provider.com"
+api_key = "sk-your-real-key-here"
+```
+
+All API settings are read exclusively from this toml file. They are not forwarded to environment variables.
+
+### 4. Requirements
+
+- **Linux** (Windows is not supported)
+- **Python 3.11+** (for `tomllib` support in the bridge runner)
+- **claude-code-sdk** Python package (for `claude_skill_runner.py`)
+- **nvidia-smi** (only needed when GPU probing is used)
+
+## Role Summary
+
+| Role | Owner | Purpose |
+|------|-------|---------|
+| **Orchestrator** | Codex (Layer 2) | Single control plane; interrogates, plans, gates, synthesizes |
+| **Refresher** | Claude (skill) | Initialize/refresh run-state spec documents |
+| **Curator** | Claude (skill) | Workspace hygiene decisions (retain/archive/delete/promote) |
+| **Opus Coder** | Claude (skill) | Primary execution: implement → debug → execute |
+| **Preflight Auditor** | Codex (subagent) | Stage-aware readiness audit (`initial_readiness` / `run_gate`) |
+| **Postrun Auditor** | Codex (subagent) | Execution-outcome evaluation against frozen objectives |
+| **Codex Anomaly Analyst** | Codex (subagent) | Independent read-only anomaly route |
+| **Claude Anomaly Analyst** | Claude (skill) | Independent read-only anomaly route (second perspective) |
+
+## Source-of-Truth Priority
+
+1. `~/.codex/AGENTS.md` — user-level control architecture
+2. User-level Codex config and protocol helpers
+3. User-level skill definitions (`~/.agents/skills/`)
+4. Repo-level `AGENTS.md` — project-coupled semantics
+5. Repo-level `CLAUDE.md`
+6. `specs/` — run-state documents
+7. `ops/contracts/` — role contracts
+8. `ops/templates/` — protocol templates
+9. `artifacts/runs/<run_id>/` — run artifacts
+
+## Version History
+
+### v5
+- API settings read exclusively from `bridge_api.toml`; no env-var forwarding.
+- JSON schemas enforce enum constraints for `issue_type` and `stage_effect`.
+- `receipt.schema.json` aligned with runner code validation (`role`, `phase`, `scope_completed`, `issues`).
+- All shell scripts unified to `python3`.
+- `validate_json.py` now handles missing files and invalid JSON gracefully.
+- Fixed Opus Coder `worker.md` markdown formatting (was incorrectly wrapped in fenced code block).
+- Fixed phantom reference to non-existent `gpu_policy.md`.
+- Fixed duplicate section numbering in `~/.codex/AGENTS.md`.
+
+### v4
+- Role contracts embedded directly into Codex subagent prompts and Claude skill workers. Repository `ops/contracts/*.md` remains project source of truth, but workers no longer rely on thin pointers.
+
+### v3
+- Rebuilt from repository original protocol assets instead of thin ad-hoc layer.
+- `ensure-project-state` implemented as actual helper script.
+- `cc-opus-coder` gained GPU probing and owned-process tracking helpers.
+- Claude leaf workers moved from `~/.claude/agents/` to `~/.agents/skills/cc-*`.
+- `~/.claude/CLAUDE.md` kept as thin shared runtime layer only.

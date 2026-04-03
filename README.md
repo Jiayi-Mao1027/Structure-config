@@ -78,6 +78,7 @@ codex_native_bootstrap_pack_v5/
         ├── AGENTS.md                # User-level control-plane constitution
         ├── config.toml              # Orchestrator model/behavior config
         ├── bridge_api.toml          # Claude bridge API config (fill in your keys)
+        ├── hooks.json               # Lifecycle hooks (session/bash/stop)
         ├── rules/default.rules      # Shared runtime rules
         ├── agents/                  # Codex-native subagent definitions
         │   ├── codex_anomaly_analyst.toml
@@ -89,7 +90,11 @@ codex_native_bootstrap_pack_v5/
             │   ├── ensure_project_state.sh  # Bootstrap repo state
             │   ├── gpu_probe.py             # GPU discovery & selection
             │   ├── owned_processes.py       # Process ownership guard
-            │   └── validate_json.py         # JSON validation helper
+            │   ├── validate_json.py         # JSON validation helper
+            │   ├── session_start_summary.py # SessionStart hook
+            │   ├── pre_bash_guard.py        # PreToolUse(Bash) safety guard
+            │   ├── post_bash_check.py       # PostToolUse(Bash) auto-register
+            │   └── stop_checkpoint.py       # Stop checkpoint persistence
             ├── runtime/
             │   └── gpu_policy.toml          # GPU selection policy
             ├── schemas/
@@ -140,6 +145,19 @@ All API settings are read exclusively from this toml file. They are not forwarde
 - **claude-code-sdk** Python package (for `claude_skill_runner.py`)
 - **nvidia-smi** (only needed when GPU probing is used)
 
+## Lifecycle Hooks
+
+The system includes four lifecycle hooks (`~/.codex/hooks.json`) that form a runtime enforcement loop:
+
+| Hook | Event | Script | Purpose |
+|------|-------|--------|---------|
+| **SessionStart** | `startup\|resume` | `session_start_summary.py` | Read durable state (specs, checkpoint, latest run) and emit a JSON summary so the Orchestrator knows where to resume |
+| **PreToolUse** | `Bash` | `pre_bash_guard.py` | Block kills of foreign PIDs (cross-checks `owned_processes`), block destructive ops on critical paths, warn on GPU launches without prior probe |
+| **PostToolUse** | `Bash` | `post_bash_check.py` | Auto-detect and register background PIDs, set `gpu_probed` flag, log non-zero exit codes to event log |
+| **Stop** | any | `stop_checkpoint.py` | Persist stage/phase/owned-process state to `checkpoint.json` so the next session can pick up cleanly |
+
+Runtime state produced by hooks is stored under `~/.codex/runtime_state/` (excluded from git).
+
 ## Role Summary
 
 | Role | Owner | Purpose |
@@ -168,6 +186,7 @@ All API settings are read exclusively from this toml file. They are not forwarde
 ## Version History
 
 ### v5
+- Lifecycle hooks implemented: `SessionStart`, `PreToolUse(Bash)`, `PostToolUse(Bash)`, `Stop` with four enforcement scripts.
 - API settings read exclusively from `bridge_api.toml`; no env-var forwarding.
 - JSON schemas enforce enum constraints for `issue_type` and `stage_effect`.
 - `receipt.schema.json` aligned with runner code validation (`role`, `phase`, `scope_completed`, `issues`).

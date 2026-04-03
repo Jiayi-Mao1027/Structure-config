@@ -1,0 +1,4 @@
+{
+  "default_model": "external-bridge",
+  "note": "Claude leaf-worker roles are entered through ~/.agents/skills/cc-* rather than ~/.claude/agents/."
+}

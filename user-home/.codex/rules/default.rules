@@ -1,0 +1,4 @@
+- Project semantics belong in the repository.
+- Initialize bootstrap state before role dispatch on first entry.
+- Prefer explicit receipts, reports, and handoffs over chat-memory-only state.
+- Never kill a process or shell you did not launch yourself.

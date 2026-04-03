@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Secrets / credentials  real deployed config with keys
+# The repo keeps a sanitized template; actual keys must never be committed.
+# If someone copies bridge_api.toml.example -> bridge_api.toml and fills in
+# real credentials, this line prevents accidental commit.
+# (The template itself is tracked as bridge_api.toml with placeholder values.)
+
+# Runtime state produced by the protocol helpers
+user-home/.codex/runtime_state/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

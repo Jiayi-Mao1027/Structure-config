@@ -1,0 +1,18 @@
+# Copy this file to ~/.codex/bridge_api.toml and fill in the real values.
+
+[claude_bridge]
+enabled = true
+provider = "aipaic"
+api_base_url = ""
+api_key = ""
+model = "claude-opus-4-6-thinking"
+api_format = "openai_compatible"
+timeout_sec = 1800
+max_retries = 3
+
+[claude_bridge.headers]
+# X-Workspace = "safe_opd"
+
+[claude_bridge.execution]
+stream = true
+temperature = 0.0
